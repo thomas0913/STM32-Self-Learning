@@ -12,6 +12,7 @@
 #define STDERR_FILENO 2
 
 UART_HandleTypeDef *gHuart;
+UART_SYNC_MODE current_uart_sync_mode = 1;
 
 void RetargetInit(UART_HandleTypeDef *huart) {
     gHuart = huart;
@@ -28,8 +29,8 @@ int _write(int file, char *ptr, int len)
 {
     HAL_StatusTypeDef hstatus;
     if (file == STDOUT_FILENO || file == STDERR_FILENO) {
-
-        #if (CURRENT_UART_SYNC_MODE == UART_POLLING)
+        
+        if (current_uart_sync_mode == UART_POLLING) {
             // Polling 模式
             hstatus = HAL_UART_Transmit(gHuart, (uint8_t *) ptr, len, HAL_MAX_DELAY);
             if (hstatus == HAL_OK) {
@@ -37,16 +38,22 @@ int _write(int file, char *ptr, int len)
             } else {
                 return EIO; // EIO is defined in errno.h of glibc
             }
-
-        #elif (CURRENT_UART_SYNC_MODE == UART_INTERRUPT)
+        } else if (current_uart_sync_mode == UART_INTERRUPT) {
             // Interrupt 模式：呼叫 Ring Buffer 寫入函數
-
-        #elif (CURRENT_UART_SYNC_MODE == UART_DMA)
+            while ((HAL_UART_GetState(gHuart) == HAL_UART_STATE_BUSY_TX) || (HAL_UART_GetState(gHuart) == HAL_UART_STATE_BUSY_TX_RX));
+            hstatus = HAL_UART_Transmit_IT(gHuart, (uint8_t *) ptr, len);
+            if (hstatus == HAL_OK) {
+                return len;
+            } else {
+                return EIO; // EIO is defined in errno.h of glibc
+            }
+        } else if (current_uart_sync_mode == UART_DMA) {
             // DMA 模式：呼叫 Ring Buffer 寫入函數
-
-        #else
-            #error "未知的 UART 傳輸模式配置！請檢查 retarget.h"
-        #endif
+            ;
+        } else {
+            // 未知的 UART 傳輸模式配置！請檢查 retarget.h
+            return -1;
+        }
     }
 
     errno = EBADF;
@@ -57,27 +64,31 @@ int _write(int file, char *ptr, int len)
 int _read(int file, char *ptr, int len)
 {
     HAL_StatusTypeDef hstatus;
-
     if (file == STDIN_FILENO) {
 
-        #if (CURRENT_UART_SYNC_MODE == UART_POLLING)
+        if (current_uart_sync_mode == UART_POLLING) {
             // Polling 模式
             hstatus = HAL_UART_Receive(gHuart, (uint8_t *) ptr, 1, HAL_MAX_DELAY);
             if (hstatus == HAL_OK) {
-                return len;
+                return 1;
             } else {
                 return EIO; // EIO is defined in errno.h of glibc
             }
-
-        #elif (CURRENT_UART_SYNC_MODE == UART_INTERRUPT)
+        } else if (current_uart_sync_mode == UART_INTERRUPT) {
             // Interrupt 模式：呼叫 Ring Buffer 寫入函數
-
-        #elif (CURRENT_UART_SYNC_MODE == UART_DMA)
+            hstatus = HAL_UART_Receive_IT(gHuart, (uint8_t *) ptr, 1);
+            if (hstatus == HAL_OK) {
+                return 1;
+            } else {
+                return EIO; // EIO is defined in errno.h of glibc
+            }
+        } else if (current_uart_sync_mode == UART_DMA) {
             // DMA 模式：呼叫 Ring Buffer 寫入函數
-
-        #else
-            #error "未知的 UART 傳輸模式配置！請檢查 retarget.h"
-        #endif
+            ;
+        } else {
+            // 未知的 UART 傳輸模式配置！請檢查 retarget.h
+            return -1;
+        }
     }
 
     errno = EBADF;

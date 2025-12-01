@@ -9,8 +9,6 @@ typedef enum {
     UART_DMA         // 高速非同步傳輸
 } UART_SYNC_MODE;
 
-#define CURRENT_UART_SYNC_MODE UART_POLLING
-
 void RetargetInit(UART_HandleTypeDef *huart);
 int _write(int file, char* ptr, int len);
 int _read(int file, char* ptr, int len);

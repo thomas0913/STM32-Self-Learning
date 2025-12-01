@@ -1,38 +1,58 @@
 {
-    "configurations": [
-        {
-            "name": "macos-clang-arm64",
-            "includePath": [
-                "${workspaceFolder}/**"
-            ],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "${default}",
-            "cppStandard": "${default}",
-            "intelliSenseMode": "macos-clang-arm64",
-            "compilerArgs": [
-                ""
-            ]
-        },
-        {
-            "name": "STM32",
-            "includePath": [
-                "${workspaceFolder}/**",
-                "Core/Inc",
-                "Drivers/STM32F1xx_HAL_Driver/Inc/Legacy",
-                "Drivers/STM32F1xx_HAL_Driver/Inc",
-                "Drivers/CMSIS/Device/ST/STM32F1xx/Include",
-                "Drivers/CMSIS/Include"
-            ],
-            "defines": [
-                "DEBUG",
-                "USE_HAL_DRIVER",
-                "STM32F103xB"
-            ],
-            "compilerPath": "/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.macos64_1.0.0.202411102158/tools/bin/arm-none-eabi-gcc",
-            "cStandard": "c17",
-            "cppStandard": "gnu++14",
-            "intelliSenseMode": "gcc-arm"
-        }
-    ],
-    "version": 4
+  "configurations": [
+    {
+      "name": "windows-clang-x64",
+      "includePath": [
+        "${workspaceFolder}/**"
+      ],
+      "compilerPath": "clang",
+      "cStandard": "${default}",
+      "cppStandard": "${default}",
+      "intelliSenseMode": "windows-clang-x64",
+      "compilerArgs": [
+        ""
+      ]
+    },
+    {
+      "name": "STM32_MacOS",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "Core/Inc",
+        "Drivers/STM32F1xx_HAL_Driver/Inc/Legacy",
+        "Drivers/STM32F1xx_HAL_Driver/Inc",
+        "Drivers/CMSIS/Device/ST/STM32F1xx/Include",
+        "Drivers/CMSIS/Include"
+      ],
+      "defines": [
+        "DEBUG",
+        "USE_HAL_DRIVER",
+        "STM32F103xB"
+      ],
+      "compilerPath": "/Applications/STM32CubeIDE.app/Contents/Eclipse/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.macos64_1.0.0.202411102158/tools/bin/arm-none-eabi-gcc",
+      "cStandard": "c17",
+      "cppStandard": "gnu++14",
+      "intelliSenseMode": "gcc-arm"
+    },
+    {
+      "name": "STM32_Windows",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "Core/Inc",
+        "Drivers/STM32F1xx_HAL_Driver/Inc/Legacy",
+        "Drivers/STM32F1xx_HAL_Driver/Inc",
+        "Drivers/CMSIS/Device/ST/STM32F1xx/Include",
+        "Drivers/CMSIS/Include"
+      ],
+      "defines": [
+        "DEBUG",
+        "USE_HAL_DRIVER",
+        "STM32F103xB"
+      ],
+      "compilerPath": "C:\\ST\\STM32CubeIDE_1.19.0\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.13.3.rel1.win32_1.0.0.202411081344\\tools\\bin\\arm-none-eabi-gcc.exe",
+      "cStandard": "c17",
+      "cppStandard": "gnu++14",
+      "intelliSenseMode": "gcc-arm"
+    }
+  ],
+  "version": 4
 }

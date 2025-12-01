@@ -46,6 +46,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart2;
+uint8_t UartReady = SET;
 
 /* USER CODE BEGIN PV */
 
@@ -61,9 +62,9 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void printWelcomeMessage(void);
 uint8_t processUserInput(uint8_t opt);
 uint8_t readUserInput(void);
+void performCriticalTasks(void);
 /* USER CODE END 0 */
 
 /**
@@ -100,11 +101,16 @@ int main(void)
   /* Enables retarget of standard I/O over the USART2 */
   RetargetInit(&huart2);
 
-  printf("hello world");
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
 
 printMessage:
 
-	printWelcomeMessage();
+  printf("\033[0;0H"); // set cursor
+  printf("\033[2J"); // clear screen
+  printf("Welcome to the Blue Pill management console\r\n");
+  printf("Select the option you are interested in:\r\n\t1. Toggle LD2 LED\r\n\t2. Read USER BUTTON status\r\n\t3. Clear screen and print this message ");
+  printf("\r\n> ");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -116,48 +122,9 @@ printMessage:
     if (opt == 3) {
     	goto printMessage;
     }
-
+    performCriticalTasks();
   }
   /* USER CODE END 3 */
-}
-
-void printWelcomeMessage(void) {
-	HAL_UART_Transmit(&huart2, (uint8_t*)"\033[0;0H", strlen("\033[0;0H"), HAL_MAX_DELAY);
-	HAL_UART_Transmit(&huart2, (uint8_t*)"\033[2J", strlen("\033[2J"), HAL_MAX_DELAY);
-	HAL_UART_Transmit(&huart2, (uint8_t*)WELCOME_MSG, strlen(WELCOME_MSG), HAL_MAX_DELAY);
-	HAL_UART_Transmit(&huart2, (uint8_t*)MAIN_MENU, strlen(MAIN_MENU), HAL_MAX_DELAY);
-}
-
-uint8_t readUserInput(void) {
-	char readBuf[1];
-
-	HAL_UART_Transmit(&huart2, (uint8_t*)PROMPT, strlen(PROMPT), HAL_MAX_DELAY);
-	HAL_UART_Receive(&huart2, (uint8_t*)readBuf, 1, HAL_MAX_DELAY);
-	return atoi(readBuf);
-}
-
-uint8_t processUserInput(uint8_t opt) {
-  char msg[30];
-
-  if(!opt || opt > 3)
-    return 0;
-
-  sprintf(msg, "%d", opt);
-  HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-
-  switch(opt) {
-  case 1:
-    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-    break;
-  case 2:
-    sprintf(msg, "\r\nUSER BUTTON status: %s", HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_5) == GPIO_PIN_RESET ? "PRESSED" : "RELEASED");
-    HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), HAL_MAX_DELAY);
-    break;
-  case 3:
-    return 2;
-  };
-
-  return 1;
 }
 
 /**
@@ -224,29 +191,11 @@ static void MX_USART2_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART2_Init 2 */
-
+  //HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+  //HAL_NVIC_EnableIRQ(USART2_IRQn);
   /* USER CODE END USART2_Init 2 */
 
 }
-
-/*
-void HAL_UART_MspInit(UART_HandleTypeDef* huart) {
-	GPIO_InitTypeDef GPIO_InitStruct;
-	if (huart->Instance == USART2) {
-		// Enable Clock
-		__HAL_RCC_USART2_CLK_ENABLE();
-
-		//USART2 GPIO Configuration
-		// PA2 --> USART2_TX
-		// PA3 --> USART2_RX
-		GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_3;
-		GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-		GPIO_InitStruct.Pull = GPIO_NOPULL;
-		GPIO_InitStruct.Speed = GPIO_SPEED_LOW;
-		HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-	}
-}
-*/
 
 /**
   * @brief GPIO Initialization Function
@@ -280,12 +229,57 @@ static void MX_GPIO_Init(void)
 	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 	/* EXTI interrupt init*/
-	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 0);
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
 /* USER CODE BEGIN 4 */
+void USART2_IRQHandler(void) {
+  HAL_UART_IRQHandler(&huart2);
+}
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+  // Transfer complete
+  UartReady = SET;
+}
+
+uint8_t readUserInput(void) {
+	char readBuf[1];
+
+  if (UartReady == SET) {
+    UartReady = RESET;
+    scanf(" %c", &readBuf[0]);
+  }
+  return atoi(readBuf);
+}
+
+uint8_t processUserInput(uint8_t opt) {
+  char msg[30];
+
+  if(!opt || opt > 3)
+    return 0;
+
+  printf("%d", opt);
+
+  switch(opt) {
+  case 1:
+    HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+    break;
+  case 2:
+    sprintf(msg, "\r\nUSER BUTTON status: %s", HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_5) == GPIO_PIN_SET ? "PRESSED" : "RELEASED");
+    printf("%s", msg);
+    break;
+  case 3:
+    return 2;
+  };
+
+  printf("\r\n> ");
+  return 1;
+}
+
+void performCriticalTasks(void) {
+  HAL_Delay(100);
+}
 /* USER CODE END 4 */
 
 /**
