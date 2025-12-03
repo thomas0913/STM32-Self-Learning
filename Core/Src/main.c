@@ -48,6 +48,8 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_tx;
 uint8_t UartReady = SET;
 char msg[] = "Hello STM32 Lovers! This message is transferred in DMA Mode.\r\n";
+uint8_t dataArrived = 0;
+uint8_t data[1];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,7 +105,7 @@ int main(void)
   RetargetInit(&huart2);
 
   hdma_usart2_tx.Instance = DMA1_Channel7;
-  hdma_usart2_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
+  hdma_usart2_tx.Init.Direction = DMA_PERIPH_TO_MEMORY; // receive data from uart
   hdma_usart2_tx.Init.PeriphInc = DMA_PINC_DISABLE;
   hdma_usart2_tx.Init.MemInc = DMA_MINC_ENABLE;
   hdma_usart2_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
@@ -113,22 +115,23 @@ int main(void)
   hdma_usart2_tx.XferCpltCallback = &DMATransferComplete;
   HAL_DMA_Init(&hdma_usart2_tx);
 
+  __HAL_LINKDMA(&huart2, hdmarx, hdma_usart2_tx);
+
   // DMA interrupt init
   HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
 
-  HAL_DMA_Start_IT(&hdma_usart2_tx, (uint32_t)msg, (uint32_t)&huart2.Instance->DR, strlen(msg));
+  // Peripheral interrupt init
+  HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(USART2_IRQn);
 
-  // Enable UART in DMA mode
-  huart2.Instance->CR3 |= USART_CR3_DMAT;
-  /*
-  if (HAL_DMA_PollForTransfer(&hdma_usart2_tx, HAL_DMA_FULL_TRANSFER, HAL_MAX_DELAY) == HAL_OK) {
-    // Disable UART DMA mode
-    huart2.Instance->CR3 &= ~USART_CR3_DMAT;
-    // Turn led on
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  HAL_UART_Receive_DMA(&huart2, data, 1);
+
+  while (!dataArrived)
+  {
+    ;
   }
-  */
+  
   
   /* USER CODE END 2 */
 
@@ -267,7 +270,11 @@ void USART2_IRQHandler(void) {
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
   // Transfer complete
-  UartReady = SET;
+  dataArrived = 1;
+}
+
+void DMA1_Channel7_IRQHandler(void) {
+  HAL_DMA_IRQHandler(&hdma_usart2_tx);
 }
 
 uint8_t readUserInput(void) {

@@ -12,7 +12,7 @@
 #define STDERR_FILENO 2
 
 UART_HandleTypeDef *gHuart;
-UART_SYNC_MODE current_uart_sync_mode = 2;
+UART_SYNC_MODE current_uart_sync_mode = 1;
 
 void RetargetInit(UART_HandleTypeDef *huart) {
     gHuart = huart;
@@ -49,7 +49,12 @@ int _write(int file, char *ptr, int len)
             }
         } else if (current_uart_sync_mode == UART_DMA) {
             // DMA 模式：呼叫 Ring Buffer 寫入函數
-            ;
+            hstatus = HAL_UART_Transmit_DMA(gHuart, (uint8_t *) ptr, len);
+            if (hstatus == HAL_OK) {
+                return len;
+            } else {
+                return EIO; // EIO is defined in errno.h of glibc
+            }
         } else {
             // 未知的 UART 傳輸模式配置！請檢查 retarget.h
             return -1;
@@ -84,7 +89,12 @@ int _read(int file, char *ptr, int len)
             }
         } else if (current_uart_sync_mode == UART_DMA) {
             // DMA 模式：呼叫 Ring Buffer 寫入函數
-            ;
+            hstatus = HAL_UART_Receive_DMA(gHuart, (uint8_t *) ptr, 1);
+            if (hstatus == HAL_OK) {
+                return 1;
+            } else {
+                return EIO; // EIO is defined in errno.h of glibc
+            }
         } else {
             // 未知的 UART 傳輸模式配置！請檢查 retarget.h
             return -1;
