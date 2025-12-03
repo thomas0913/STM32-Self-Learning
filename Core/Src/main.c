@@ -39,25 +39,23 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define WELCOME_MSG "Welcome to the Blue Pill management console\r\n"
-#define MAIN_MENU   "Select the option you are interested in:\r\n\t1. Toggle LD2 LED\r\n\t2. Read USER BUTTON status\r\n\t3. Clear screen and print this message "
-#define PROMPT "\r\n> "
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-UART_HandleTypeDef huart2;
-uint8_t UartReady = SET;
-
 /* USER CODE BEGIN PV */
-
+UART_HandleTypeDef huart2;
+DMA_HandleTypeDef hdma_usart2_tx;
+uint8_t UartReady = SET;
+char msg[] = "Hello STM32 Lovers! This message is transferred in DMA Mode.\r\n";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
+/* USER CODE BEGIN PFP */
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
-/* USER CODE BEGIN PFP */
-
+static void MX_DMA_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -75,7 +73,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	uint8_t opt = 0;
+	
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -97,32 +95,39 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_DMA_Init();
+  
   /* USER CODE BEGIN 2 */
   /* Enables retarget of standard I/O over the USART2 */
   RetargetInit(&huart2);
 
-  HAL_NVIC_SetPriority(USART2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(USART2_IRQn);
+  hdma_usart2_tx.Instance = DMA1_Channel7;
+  hdma_usart2_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
+  hdma_usart2_tx.Init.PeriphInc = DMA_PINC_DISABLE;
+  hdma_usart2_tx.Init.MemInc = DMA_MINC_ENABLE;
+  hdma_usart2_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  hdma_usart2_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+  hdma_usart2_tx.Init.Mode = DMA_NORMAL;
+  hdma_usart2_tx.Init.Priority = DMA_PRIORITY_LOW;
+  HAL_DMA_Init(&hdma_usart2_tx);
 
-printMessage:
+  HAL_DMA_Start(&hdma_usart2_tx, (uint32_t)msg, (uint32_t)&huart2.Instance->DR, strlen(msg));
 
-  printf("\033[0;0H"); // set cursor
-  printf("\033[2J"); // clear screen
-  printf("Welcome to the Blue Pill management console\r\n");
-  printf("Select the option you are interested in:\r\n\t1. Toggle LD2 LED\r\n\t2. Read USER BUTTON status\r\n\t3. Clear screen and print this message ");
-  printf("\r\n> ");
+  // Enable UART in DMA mode
+  huart2.Instance->CR3 |= USART_CR3_DMAT;
+  // Wait for transfer complete
+  HAL_DMA_PollForTransfer(&hdma_usart2_tx, HAL_DMA_FULL_TRANSFER, HAL_MAX_DELAY);
+  // Disable UART DMA mode
+  huart2.Instance->CR3 &= ~USART_CR3_DMAT;
+  // Turn led on
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    opt = readUserInput();
-    processUserInput(opt);
-    if (opt == 3) {
-    	goto printMessage;
-    }
-    performCriticalTasks();
+    ;
   }
   /* USER CODE END 3 */
 }
@@ -161,6 +166,10 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+static void MX_DMA_Init(void) {
+  __HAL_RCC_DMA1_CLK_ENABLE();
 }
 
 /**
