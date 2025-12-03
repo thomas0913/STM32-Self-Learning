@@ -60,6 +60,7 @@ static void MX_DMA_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void DMATransferComplete(DMA_HandleTypeDef *hdma);
 uint8_t processUserInput(uint8_t opt);
 uint8_t readUserInput(void);
 void performCriticalTasks(void);
@@ -109,18 +110,26 @@ int main(void)
   hdma_usart2_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
   hdma_usart2_tx.Init.Mode = DMA_NORMAL;
   hdma_usart2_tx.Init.Priority = DMA_PRIORITY_LOW;
+  hdma_usart2_tx.XferCpltCallback = &DMATransferComplete;
   HAL_DMA_Init(&hdma_usart2_tx);
 
-  HAL_DMA_Start(&hdma_usart2_tx, (uint32_t)msg, (uint32_t)&huart2.Instance->DR, strlen(msg));
+  // DMA interrupt init
+  HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
+
+  HAL_DMA_Start_IT(&hdma_usart2_tx, (uint32_t)msg, (uint32_t)&huart2.Instance->DR, strlen(msg));
 
   // Enable UART in DMA mode
   huart2.Instance->CR3 |= USART_CR3_DMAT;
-  // Wait for transfer complete
-  HAL_DMA_PollForTransfer(&hdma_usart2_tx, HAL_DMA_FULL_TRANSFER, HAL_MAX_DELAY);
-  // Disable UART DMA mode
-  huart2.Instance->CR3 &= ~USART_CR3_DMAT;
-  // Turn led on
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  /*
+  if (HAL_DMA_PollForTransfer(&hdma_usart2_tx, HAL_DMA_FULL_TRANSFER, HAL_MAX_DELAY) == HAL_OK) {
+    // Disable UART DMA mode
+    huart2.Instance->CR3 &= ~USART_CR3_DMAT;
+    // Turn led on
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  }
+  */
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -238,11 +247,20 @@ static void MX_GPIO_Init(void)
 	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 	/* EXTI interrupt init*/
-	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 1, 0);
+	HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
 	HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
 /* USER CODE BEGIN 4 */
+void DMATransferComplete(DMA_HandleTypeDef *hdma) {
+  if (hdma->Instance == DMA1_Channel7) {
+    // Disable UART DMA mode
+    huart2.Instance->CR3 &= ~USART_CR3_DMAT;
+    // Turn led on
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+  }
+}
+
 void USART2_IRQHandler(void) {
   HAL_UART_IRQHandler(&huart2);
 }
