@@ -12,7 +12,7 @@
 #define STDERR_FILENO 2
 
 UART_HandleTypeDef *gHuart;
-UART_SYNC_MODE current_uart_sync_mode = 1;
+UART_SYNC_MODE current_uart_sync_mode = UART_POLLING;
 
 void RetargetInit(UART_HandleTypeDef *huart) {
     gHuart = huart;
