@@ -46,7 +46,6 @@
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 DMA_HandleTypeDef hdma_tim1_up;
-DMA_HandleTypeDef hdma_tim3_ch1_trig;
 
 UART_HandleTypeDef huart2;
 
@@ -59,6 +58,8 @@ uint8_t data[2] = {0xFF, 0x0};
 uint16_t captures[2];
 volatile uint8_t captureDone = 0;
 float freq = 0.0;
+volatile uint16_t CH1_FREQ = 0;
+volatile uint16_t CH2_FREQ = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,7 +77,11 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+uint16_t computePulse(TIM_HandleTypeDef *htim, uint32_t chFrequency) {
+  uint32_t timFrequency= HAL_RCC_GetHCLKFreq() / (htim->Instance->PSC + 1);
 
+  return (uint16_t)(timFrequency / chFrequency);
+}
 /* USER CODE END 0 */
 
 /**
@@ -122,10 +127,15 @@ int main(void)
   HAL_TIM_Base_Start(&htim1);
   HAL_DMA_Start(&hdma_tim1_up, (uint32_t)data, (uint32_t)&GPIOC->ODR, 2);
   __HAL_TIM_ENABLE_DMA(&htim1, TIM_DMA_UPDATE);
-
-  // capture TIM3 CNT reg
-  HAL_TIM_IC_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t*) captures, 2);
   
+  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_2);
+
+  printf("HCLK: %ld\r\n", HAL_RCC_GetHCLKFreq());
+  printf("PSC: %ld\r\n", (htim3.Instance->PSC + 1));
+  printf("freq: %ld\r\n", HAL_RCC_GetHCLKFreq() / (htim3.Instance->PSC + 1));
+  printf("ch1 freq: %d\r\n", CH1_FREQ);
+  printf("ch2 freq: %d\r\n", CH2_FREQ);
   
   /* USER CODE END 2 */
 
@@ -134,19 +144,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    if (captureDone != 0) {
-      if (captures[1] >= captures[2]) {
-        diffCapture = captures[1] - captures[0];
-      } else {
-        diffCapture = (htim3.Instance->ARR - captures[0]) + captures[1];
-      }
 
-      freq = HAL_RCC_GetPCLK1Freq() / (htim3.Instance->PSC + 1);
-      freq = (float) freq / diffCapture;
-
-      printf("Input frequency: %.3f\r\n", freq);
-      while(1);
-    }
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -250,18 +248,18 @@ static void MX_TIM3_Init(void)
   /* USER CODE END TIM3_Init 0 */
 
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_IC_InitTypeDef sConfigIC = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
 
   /* USER CODE BEGIN TIM3_Init 1 */
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 999;
+  htim3.Init.Prescaler = 3;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 65535;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_IC_Init(&htim3) != HAL_OK)
+  if (HAL_TIM_OC_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -271,17 +269,26 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
-  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
-  if (HAL_TIM_IC_ConfigChannel(&htim3, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
+
+  CH1_FREQ = computePulse(&htim3, 25000);
+  CH2_FREQ = computePulse(&htim3, 50000);
+
+  sConfigOC.OCMode = TIM_OCMODE_TOGGLE;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
@@ -332,9 +339,6 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel5_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
-  /* DMA1_Channel6_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
 
 }
 
@@ -377,10 +381,33 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-  if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
-    captureDone = 1;
+void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
+  uint32_t pulse;
+  uint16_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
+
+  /* TIMx_CH1 toggling with frequency = 50KHz */
+  if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
+    pulse = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+    /* Set the Capture Compare Register value */
+    if((pulse + CH1_FREQ) < arr)
+      __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_1, (pulse + CH1_FREQ));
+    else
+      __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_1, (pulse + CH1_FREQ) - arr);
   }
+
+  /* TIMx_CH2 toggling with frequency = 100KHz */
+  if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2) {
+  pulse = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+  /* Set the Capture Compare Register value */
+  if((pulse + CH2_FREQ) < arr)
+    __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_2, (pulse + CH2_FREQ));
+  else
+    __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_2, (pulse + CH2_FREQ) - arr);
+  }
+}
+
+void TIM3_IRQHandler(void) {
+  HAL_TIM_IRQHandler(&htim3);
 }
 /* USER CODE END 4 */
 
