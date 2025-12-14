@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "retarget.h"
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,9 +44,10 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
-DMA_HandleTypeDef hdma_tim1_up;
+DMA_HandleTypeDef hdma_tim2_ch1;
+DMA_HandleTypeDef hdma_tim3_ch1_trig;
 
 UART_HandleTypeDef huart2;
 
@@ -54,12 +56,6 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_tx;
 DMA_HandleTypeDef hdma_tim1_up;
 char msg[] = "Hello STM32 Lovers! This message is transferred in DMA Mode.\r\n";
-uint8_t data[2] = {0xFF, 0x0};
-uint16_t captures[2];
-volatile uint8_t captureDone = 0;
-float freq = 0.0;
-volatile uint16_t CH1_FREQ = 0;
-volatile uint16_t CH2_FREQ = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -67,7 +63,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_TIM1_Init(void);
+static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 void SystemClock_Config(void);
@@ -77,11 +73,8 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint16_t computePulse(TIM_HandleTypeDef *htim, uint32_t chFrequency) {
-  uint32_t timFrequency= HAL_RCC_GetHCLKFreq() / (htim->Instance->PSC + 1);
-
-  return (uint16_t)(timFrequency / chFrequency);
-}
+#define PI    3.14159
+#define ASR   1.8 //360 / 200 = 1.8
 /* USER CODE END 0 */
 
 /**
@@ -92,7 +85,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	
+	uint16_t IV[200];
+  float angle;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -101,7 +95,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  uint16_t diffCapture = 0;
+  
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -115,38 +109,39 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_USART2_UART_Init();
-  MX_TIM1_Init();
+  MX_TIM2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   /* Enables retarget of standard I/O over the USART2 */
   RetargetInit(&huart2);
   printf("\033[0;0H"); // set cursor
   printf("\033[2J"); // clear screen
-
-  // toggle led
-  HAL_TIM_Base_Start(&htim1);
-  HAL_DMA_Start(&hdma_tim1_up, (uint32_t)data, (uint32_t)&GPIOC->ODR, 2);
-  __HAL_TIM_ENABLE_DMA(&htim1, TIM_DMA_UPDATE);
+  printf("Wellcom to stm32f103c8t6 blue pill board!\r\n");
   
-  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_1);
-  HAL_TIM_OC_Start_IT(&htim3, TIM_CHANNEL_2);
+  for (uint8_t i = 0; i < 200; i++) {
+    angle = ASR*(float)i;
+    IV[i] = (uint16_t) rint(100 + 99*sinf(angle*(PI/180))); //每步進之脈衝的period
+    printf("IV[%d]=%d\r\n", i, IV[i]);
+  }
 
-  printf("HCLK: %ld\r\n", HAL_RCC_GetHCLKFreq());
-  printf("PSC: %ld\r\n", (htim3.Instance->PSC + 1));
-  printf("freq: %ld\r\n", HAL_RCC_GetHCLKFreq() / (htim3.Instance->PSC + 1));
-  printf("ch1 freq: %d\r\n", CH1_FREQ);
-  printf("ch2 freq: %d\r\n", CH2_FREQ);
+  // 每200個脈衝為一PWM週期
+  HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1, (uint32_t *)IV, 200);
   
+  HAL_Delay(10);
   /* USER CODE END 2 */
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
   while (1)
   {
+    /* code */;
+  }
+  
+  /* USER CODE BEGIN WHILE */
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+
   /* USER CODE END 3 */
 }
 
@@ -167,7 +162,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI_DIV2;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL16;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL12;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -182,7 +177,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -190,48 +185,51 @@ void SystemClock_Config(void)
 }
 
 /**
-  * @brief TIM1 Initialization Function
+  * @brief TIM2 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM1_Init(void)
+static void MX_TIM2_Init(void)
 {
 
-  /* USER CODE BEGIN TIM1_Init 0 */
+  /* USER CODE BEGIN TIM2_Init 0 */
 
-  /* USER CODE END TIM1_Init 0 */
+  /* USER CODE END TIM2_Init 0 */
 
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
 
-  /* USER CODE BEGIN TIM1_Init 1 */
+  /* USER CODE BEGIN TIM2_Init 1 */
 
-  /* USER CODE END TIM1_Init 1 */
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 63999;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 499;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 23;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 199;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM1_Init 2 */
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
 
-  /* USER CODE END TIM1_Init 2 */
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
 
 }
 
@@ -254,12 +252,12 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 3;
+  htim3.Init.Prescaler = 23; // by fpwm = (TIMx_CLK/((Prescaler+1)*(Period+1)))
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
+  htim3.Init.Period = 199; // 取決於 (360度/角解析度)=PWM一週期需多少個脈衝=每個脈衝period變化的上限
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_OC_Init(&htim3) != HAL_OK)
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
@@ -269,19 +267,11 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-
-  CH1_FREQ = computePulse(&htim3, 25000);
-  CH2_FREQ = computePulse(&htim3, 50000);
-
-  sConfigOC.OCMode = TIM_OCMODE_TOGGLE;
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_OC_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -339,6 +329,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel5_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+  /* DMA1_Channel6_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
 
 }
 
@@ -381,34 +374,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
-  uint32_t pulse;
-  uint16_t arr = __HAL_TIM_GET_AUTORELOAD(htim);
 
-  /* TIMx_CH1 toggling with frequency = 50KHz */
-  if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
-    pulse = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
-    /* Set the Capture Compare Register value */
-    if((pulse + CH1_FREQ) < arr)
-      __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_1, (pulse + CH1_FREQ));
-    else
-      __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_1, (pulse + CH1_FREQ) - arr);
-  }
-
-  /* TIMx_CH2 toggling with frequency = 100KHz */
-  if(htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2) {
-  pulse = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-  /* Set the Capture Compare Register value */
-  if((pulse + CH2_FREQ) < arr)
-    __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_2, (pulse + CH2_FREQ));
-  else
-    __HAL_TIM_SET_COMPARE(htim, TIM_CHANNEL_2, (pulse + CH2_FREQ) - arr);
-  }
-}
-
-void TIM3_IRQHandler(void) {
-  HAL_TIM_IRQHandler(&htim3);
-}
 /* USER CODE END 4 */
 
 /**
